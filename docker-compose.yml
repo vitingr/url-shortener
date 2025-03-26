@@ -1,0 +1,107 @@
+version: '2'
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - bridge
+
+  redis-client:
+    image: redis:latest
+    container_name: redis-client
+    entrypoint: redis-cli
+    depends_on:
+      - redis
+    stdin_open: true
+    tty: true
+    networks:
+      - bridge
+
+  api1:
+    container_name: api1
+    build: 
+      context: ./go-server
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./go-server:/app  
+    environment:
+      - GO_ENV=production  
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/mydatabase
+    networks:
+      - bridge
+  api2:
+    container_name: api2
+    build: 
+      context: ./go-server
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./go-server:/app  
+    environment:
+      - GO_ENV=production  
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/mydatabase
+    networks:
+      - bridge
+
+  angular-app:
+    container_name: angular-app
+    build:
+      context: ./angular-app
+      dockerfile: Dockerfile
+    depends_on:
+      - nginx
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./angular-app:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Necessário para detectar mudanças no código em sistemas de arquivos montados
+    command: ["npm", "run", "start", "--", "--host", "0.0.0.0", "--port", "4200"]
+    networks:
+      - bridge
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=mydatabase
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - bridge
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - api1
+      - api2
+    networks:
+      - bridge
+
+volumes:
+  redis-data:
+  postgres-data:
+
+networks:
+  bridge:
+    driver: bridge
+    
